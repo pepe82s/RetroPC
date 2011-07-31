@@ -34,7 +34,7 @@
  *  the demo and is responsible for the initial application hardware configuration.
  */
 
-#include "Keyboard.h"
+#include "rpc.h"
 
 /** Buffer to hold the previously generated Keyboard HID report, for comparison purposes inside the HID class driver. */
 static uint8_t PrevKeyboardHIDReportBuffer[sizeof(USB_KeyboardReport_Data_t)];

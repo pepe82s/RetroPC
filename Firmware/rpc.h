@@ -33,8 +33,8 @@
  *  Header file for Keyboard.c.
  */
 
-#ifndef _KEYBOARD_H_
-#define _KEYBOARD_H_
+#ifndef _RPC_H_
+#define _RPC_H_
 
 	/* Includes: */
 		#include <avr/io.h>

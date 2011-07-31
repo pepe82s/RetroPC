@@ -106,7 +106,7 @@ FORMAT = ihex
 
 
 # Target file name (without extension).
-TARGET = Keyboard
+TARGET = rpc
 
 
 # Object files directory
