@@ -42,6 +42,7 @@ static uint8_t PrevKeyboardHIDReportBuffer[sizeof(USB_KeyboardReport_Data_t)];
 static uint8_t btn_status = 0;
 static uint8_t whl_status = 0;
 static uint8_t fan_flow_status = 0;
+static uint8_t fan_value;
 static uint16_t timer_flow = 0, timer_fan = 0;
 static int16_t adc_voltage = 0;
 static USB_RPCReport_Data_t rpc_values =
@@ -280,12 +281,18 @@ bool CALLBACK_RPC_Device_CreateRPCReport(USB_ClassInfo_RPC_Device_t* const RPCIn
 	return false;
 }
 
-void CALLBACK_RPC_Device_ProcessRPCReport(USB_ClassInfo_RPC_Device_t* const RPCInterfaceInfo,
+void CALLBACK_RPC_Device_ProcessRPCSetFanspeed(USB_ClassInfo_RPC_Device_t* const RPCInterfaceInfo,
 										  const uint8_t ReportID,
 										  /*const uint8_t ReportType,*/
 										  const void* ReportData,
 										  const uint16_t ReportSize)
 {
+	// make sure its the data it's ment to be (single uint8_t value)
+	if( ReportSize != 1 )
+		return;
+	fan_value = *((uint8_t*)ReportData);
+	if( fan_value >= 0 && fan_value <= 100)
+		fan_flow_status |= (1<<SET_FAN_FLAG);
 	return;
 }
 
@@ -373,7 +380,17 @@ ISR(ADC_vect)
 void Watertemp_Worker()
 {
 	if( fan_flow_status & (1<<INT_TEMP_FLAG) ) {
-		rpc_values.t_water = adc_voltage;
+		int16_t temp = (adc_voltage > 511) ? adc_voltage-1024 : adc_voltage;
+		if( temp < -225 ) {
+			temp = -10*temp+9900;
+		} else if ( temp < 50 ) {
+			temp = -12*temp+9450;
+		} else if ( temp < 240 ) {
+			temp = -15*temp+9600;
+		} else {
+			temp = -20*temp+10800;
+		}
+		rpc_values.t_water = (temp/30);
 		fan_flow_status &= ~(1<<INT_TEMP_FLAG);
 	}
 }
@@ -425,9 +442,9 @@ ISR(INT3_vect)
 
 void Fans_Worker(void)
 {
-	uint32_t erg;
 	// Check for new event
 	if( fan_flow_status & (1<<INT_FAN_FLAG) ) {
+		uint32_t erg;
 		erg = timer_fan;
 		// r/m errechnen: (30*F_CPU)/(Prescaler * n)
 		erg = 3750000/erg;//>>1); // /2, dadurch prescaler verdoppelt von 8 auf 16 (hier von 4 auf 8 wegen FCPU)
@@ -435,6 +452,18 @@ void Fans_Worker(void)
 			rpc_values.v_fan = ((uint16_t)erg + 32*rpc_values.v_fan)/33;
 		fan_flow_status &= ~(1<<INT_FAN_FLAG);
 	}
+	// Check for new Fanspeed Set Event
+	if( fan_flow_status & (1<<SET_FAN_FLAG) ) {
+		TC4H = 0x0;
+		OCR4A = 30+fan_value;
+		if(fan_value == 0)
+			PORTE &= ~(1<<PE2);
+		else
+			PORTE |= (1<<PE2);
+		rpc_values.p_fan = fan_value;
+		fan_flow_status &= ~(1<<SET_FAN_FLAG);
+	}
+	
 }
 
 void WriteButtonState(uint8_t *btn_mask)

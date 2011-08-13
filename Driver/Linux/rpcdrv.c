@@ -12,7 +12,6 @@
 #include <asm/uaccess.h>
 #include <linux/mutex.h>
 
-
 #if 0
 #include <linux/stat.h>
 #include <linux/proc_fs.h>
@@ -35,13 +34,11 @@
 #define USB_RPC_MINOR_BASE	16
 #define STR_OUT_BUFFER_SIZE	25
 
-
-/* table of devices that work with this driver */
-static const struct usb_device_id rpc_table[] = {
-	{ USB_DEVICE(VENDOR_ID, PRODUCT_ID), USB_INTERFACE_INFO(0xFF,0xFF,0xFF), }, 
-	{ }					/* Terminating entry */
+enum RPC_ClassRequests_t
+{
+	RPC_REQ_SetFanspeed       = 0x59,
 };
-MODULE_DEVICE_TABLE(usb, rpc_table);
+
 
 struct rpc_status_raw
 {
@@ -50,6 +47,15 @@ struct rpc_status_raw
 	u16 v_fan;
 	u8  p_fan;
 } __attribute__((packed));
+
+
+/* table of devices that work with this driver */
+static const struct usb_device_id rpc_table[] = {
+	{ USB_DEVICE(VENDOR_ID, PRODUCT_ID), USB_INTERFACE_INFO(0xFF,0xFF,0xFF), }, 
+	{ }					/* Terminating entry */
+};
+MODULE_DEVICE_TABLE(usb, rpc_table);
+
 
 /* Structure to hold all of our device specific stuff */
 struct usb_rpc {
@@ -241,7 +247,7 @@ static ssize_t driver_read( struct file *instance, char __user *user, size_t cou
 	
 	dev = (struct usb_rpc *)instance->private_data;
 	/* if we cannot read at all, return EOF */
-	if(!dev->int_in_urb || ! count)
+	if(!dev->int_in_urb || (count<sizeof(struct rpc_status_raw)) )
 	{
 		return 0;
 	}
@@ -312,9 +318,9 @@ retry:
 	 */
 	if(dev->int_in_filled) {
 		/* we had read data */
-		sprintf(buffer,"%u %d %u %u\n",dev->rpc_status->v_water,dev->rpc_status->t_water,dev->rpc_status->v_fan,dev->rpc_status->p_fan);
-		to_copy = min( count, strlen(buffer)+1 );
-		not_copied = copy_to_user(user, buffer, to_copy);
+		//sprintf(buffer,"%u %d %u %u\n",dev->rpc_status->v_water,dev->rpc_status->t_water,dev->rpc_status->v_fan,dev->rpc_status->p_fan);
+		to_copy = sizeof(struct rpc_status_raw);
+		not_copied = copy_to_user(user, dev->rpc_status, to_copy);
 		
 		if( not_copied )
 			rv = -EFAULT;
@@ -336,11 +342,118 @@ exit:
 	return rv;
 }
 
+static ssize_t driver_write(struct file *file, const char *user_buffer, size_t count, loff_t *ppos)
+{
+	struct usb_rpc *dev;
+	int retval = 0;
+	//struct urb *urb = NULL;
+	uint8_t fanspeed;
+	//size_t writesize = min(count,(size_t)4);
+	
+	dev = file->private_data;
+	
+	/* verify that there is some data to write */
+	if( count != 1 )
+		goto error;
+	
+	/* limit the number of URs in flight */
+	if( !(file->f_flags & O_NONBLOCK) ) {
+		if( down_interruptible( &dev->limit_sem) ) {
+			retval = -ERESTARTSYS;
+			goto exit;
+		}
+	} else {
+		if( down_trylock(&dev->limit_sem) ) {
+			retval = EAGAIN;
+			goto exit;
+		}
+	}
+	
+	spin_lock_irq( &dev->err_lock );
+	retval = dev->errors;
+	if( retval < 0 ) {
+		/* any error is reported once */
+		dev->errors = 0;
+		/* to preserve notifications about reset */
+		retval = (retval == -EPIPE) ? retval : -EIO;
+	}
+	spin_unlock_irq( &dev->err_lock );
+	if( retval < 0 )
+		goto error;
+	
+	/* copy value from userspace */
+	if( copy_from_user(&fanspeed, user_buffer, 1) ) {
+		retval = -EFAULT;
+		goto error;
+	}
+	
+	/* change to uint16_t */
+	/*if( sscanf(chr_buffer, "%hu", &fanspeed) != 1 ) {
+		retval = -EFAULT;
+		goto error;
+	}*/
+	
+	if( fanspeed > 100 ) {
+		retval = -EFAULT;
+		goto error;
+	}
+	
+	/*create a urb and a buffer for it, and copy the data to the urb */
+	/*urb = usb_alloc_urb(0, GFP_KERNEL);
+	if( !urb ) {
+		retval = -ENOMEM;
+		goto error;
+	}
+	
+	buf = usb_alloc_coherent(dev->udev, 1, GFP_KERNEL, &urb->transfer_dma);
+	if( !buf ) {
+		retval = -ENOMEM;
+		goto error;
+	}*/
+	
+	//memcpy( buf, &((uint8_t)fanspeed), 1);
+	//buf[0] = (uint8_t)fanspeed;
+	
+	/* this lock makes sure that we don't submit URBs to gone devices */
+	mutex_lock( &dev->io_mutex );
+	if( !dev->interface ) {
+		mutex_unlock( &dev->io_mutex );
+		retval = -ENODEV;
+		goto error;
+	}
+	
+	/* send control urb */
+	retval = usb_control_msg(dev->udev, /* usb device */
+					usb_sndctrlpipe(dev->udev, 0), /* pipe */
+					RPC_REQ_SetFanspeed, /* request */
+					USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_INTERFACE, /*requesttpe */
+					0,1, /* requestvalue und requestindex */
+					&fanspeed, 1,/*buffer*/
+					5000 /*timeout*/
+					);
+	mutex_unlock( &dev->io_mutex );
+	
+	if( retval != 1 ) {
+		err("%s - failed submitting write urb, error %d", __func__, retval);
+		goto error;
+	}
+	
+	up(&dev->limit_sem);
+	
+	return 1;
+	
+error:
+	up(&dev->limit_sem);
+exit:
+	return retval;
+}
+
 static struct file_operations fops = {
 	.owner	= THIS_MODULE,
 	.open	= driver_open,
 	.release= driver_close,
 	.read	= driver_read,
+	.write  = driver_write,
 };
 
 #if 0

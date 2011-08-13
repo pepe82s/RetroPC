@@ -51,6 +51,8 @@
 //		#include <LUFA/Drivers/Board/LEDs.h>
 //		#include <LUFA/Drivers/Board/Buttons.h>
 		#include <LUFA/Drivers/USB/USB.h>
+		#include "../rpc_global.h"
+
 
 	/* Macros: */
 		#define BTN_1 (1<<1)
@@ -68,17 +70,11 @@
 		#define WHL1B (1<<5)
 		#define WHL2A (1<<6)
 		#define WHL2B (1<<7)
+		#define SET_FAN_FLAG 3
 		#define INT_TEMP_FLAG  2
 		#define INT_FLOW_FLAG 1
 		#define INT_FAN_FLAG 0
 
-		typedef struct
-		{
-			uint16_t v_water;
-			int16_t  t_water;
-			uint16_t v_fan;
-			uint8_t p_fan;
-		} ATTR_PACKED USB_RPCReport_Data_t;
 
 	/* Function Prototypes: */
 		void SetupHardware(void);
@@ -93,7 +89,7 @@
 		                                         uint8_t* const ReportID,
 		                                         const uint8_t ReportType,
 		                                         void* ReportData,
-		                                         uint16_t* const ReportSize);
+								 uint16_t* const ReportSize);
 		void CALLBACK_HID_Device_ProcessHIDReport(USB_ClassInfo_HID_Device_t* const HIDInterfaceInfo,
 		                                          const uint8_t ReportID,
 		                                          const uint8_t ReportType,

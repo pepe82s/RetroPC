@@ -73,8 +73,8 @@ void RPC_Device_ProcessControlRequest(USB_ClassInfo_RPC_Device_t* const RPCInter
 			}
 
 			break;*/
-		case RPC_REQ_SetReport:
-			if (USB_ControlRequest.bmRequestType == (REQDIR_HOSTTODEVICE | REQTYPE_CLASS | REQREC_INTERFACE))
+		case RPC_REQ_SetFanspeed:
+			if (USB_ControlRequest.bmRequestType == (REQDIR_HOSTTODEVICE | REQTYPE_VENDOR | REQREC_INTERFACE))
 			{
 				uint8_t ReportSize = USB_ControlRequest.wLength;
 				uint8_t  ReportID   = (USB_ControlRequest.wValue & 0xFF);
@@ -85,7 +85,7 @@ void RPC_Device_ProcessControlRequest(USB_ClassInfo_RPC_Device_t* const RPCInter
 				Endpoint_Read_Control_Stream_LE(ReportData, ReportSize);
 				Endpoint_ClearIN();
 				
-				CALLBACK_RPC_Device_ProcessRPCReport(RPCInterfaceInfo, ReportID, /*ReportType,*/
+				CALLBACK_RPC_Device_ProcessRPCSetFanspeed(RPCInterfaceInfo, ReportID, /*ReportType,*/
 				                                     &ReportData[ReportID ? 1 : 0], ReportSize - (ReportID ? 1 : 0));
 			}
 

@@ -23,7 +23,7 @@
 				//RPC_REQ_GetReport       = 0x01, /**< HID class-specific Request to get the current HID report from the device. */
 				//RPC_REQ_GetIdle         = 0x02, /**< HID class-specific Request to get the current device idle count. */
 				//RPC_REQ_GetProtocol     = 0x03, /**< HID class-specific Request to get the current HID report protocol mode. */
-				RPC_REQ_SetReport       = 0x09, /**< HID class-specific Request to set the current HID report to the device. */
+				RPC_REQ_SetFanspeed       = 0x59, /**< HID class-specific Request to set the current HID report to the device. */
 				//RPC_REQ_SetIdle         = 0x0A, /**< HID class-specific Request to set the device's idle count. */
 				//RPC_REQ_SetProtocol     = 0x0B, /**< HID class-specific Request to set the current HID report protocol mode. */
 			};
@@ -117,7 +117,7 @@
 			 *  \param[in]     ReportData        Pointer to a buffer where the received HID report is stored.
 			 *  \param[in]     ReportSize        Size in bytes of  the received report from the host.
 			 */
-			void CALLBACK_RPC_Device_ProcessRPCReport(USB_ClassInfo_RPC_Device_t* const RPCInterfaceInfo,
+			void CALLBACK_RPC_Device_ProcessRPCSetFanspeed(USB_ClassInfo_RPC_Device_t* const RPCInterfaceInfo,
 			                                          const uint8_t ReportID,
 			                                          /*const uint8_t ReportType,*/
 			                                          const void* ReportData,

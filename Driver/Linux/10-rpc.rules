@@ -1,0 +1,2 @@
+KERNEL=="rpc", MODE="0666"
+
